@@ -1,76 +1,215 @@
-<!DOCTYPE html>
-<html lang="ar">
+<!doctype html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>جود ❤️</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Jody ❤️</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{display:block;width:100vw;height:100vh}
 
-<style>
-body{
-  margin:0;
-  height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  background:black;
-  overflow:hidden;
-  font-family: Georgia, serif;
-}
+    .overlay{
+      position:fixed; inset:0;
+      display:grid; place-items:center;
+      pointer-events:none; text-align:center;
+      font-family: "Georgia", "Times New Roman", serif;
+      color: rgba(255,255,255,.92);
+    }
 
-/* القلب */
-.heart{
-  position:relative;
-  width:220px;
-  height:220px;
-  background:red;
-  transform:rotate(-45deg);
-  animation:beat 1.2s infinite;
-  box-shadow:0 0 40px red;
-}
+    .title{
+      position:fixed; top:12vh; left:0; right:0;
+      font-size: clamp(26px, 4vw, 52px);
+      font-style: italic;
+      letter-spacing:.4px;
+      text-shadow: 0 0 18px rgba(255,255,255,.12);
+    }
 
-.heart::before,
-.heart::after{
-  content:"";
-  position:absolute;
-  width:220px;
-  height:220px;
-  background:red;
-  border-radius:50%;
-}
+    .name{
+      position:fixed; left:50%; top:50%;
+      transform: translate(-50%,-35%);
+      font-size: clamp(44px, 7vw, 110px);
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-shadow:
+        0 0 14px rgba(255, 70, 90, .35),
+        0 0 34px rgba(255, 70, 90, .18);
+    }
 
-.heart::before{
-  top:-110px;
-  left:0;
-}
-
-.heart::after{
-  left:110px;
-  top:0;
-}
-
-/* الاسم */
-.name{
-  position:absolute;
-  color:white;
-  font-size:55px;
-  font-weight:bold;
-  text-shadow:0 0 15px white;
-  transform:rotate(45deg);
-}
-
-/* نبض */
-@keyframes beat{
-  0%{transform:rotate(-45deg) scale(1);}
-  50%{transform:rotate(-45deg) scale(1.08);}
-  100%{transform:rotate(-45deg) scale(1);}
-}
-</style>
+    .hint{
+      position:fixed; bottom:18px; left:0; right:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+      font-size: 12px;
+      color: rgba(255,255,255,.35);
+      letter-spacing:.4px;
+    }
+  </style>
 </head>
-
 <body>
+  <canvas id="c"></canvas>
 
-<div class="heart"></div>
-<div class="name">جود</div>
+  <div class="overlay">
+    <div class="title">When you fall in love with a programmer.</div>
+    <div class="name" id="nm">Jody</div>
+    <div class="hint">tap to sparkle ✨</div>
+  </div>
 
+<script>
+(() => {
+  const NAME = "Jody";
+  document.getElementById("nm").textContent = NAME;
+
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  let W=0,H=0,DPR=Math.max(1,Math.min(2,devicePixelRatio||1));
+
+  function resize(){
+    W = innerWidth|0; H = innerHeight|0;
+    canvas.width = (W*DPR)|0; canvas.height = (H*DPR)|0;
+    canvas.style.width = W+"px"; canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  const rand=(a,b)=>a+Math.random()*(b-a);
+
+  // Parametric heart (nice outline)
+  function heartPoint(t){
+    const x = 16*Math.pow(Math.sin(t),3);
+    const y = 13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+    return {x,y};
+  }
+
+  // Particles (soft sparks)
+  const sparks=[];
+  function spawnSpark(x,y,burst=false){
+    const n = burst ? 90 : 2;
+    for(let i=0;i<n;i++){
+      const ang = rand(0,Math.PI*2);
+      const spd = burst ? rand(1.6,6.8) : rand(0.6,2.2);
+      sparks.push({
+        x,y,
+        vx:Math.cos(ang)*spd,
+        vy:Math.sin(ang)*spd,
+        life: burst ? rand(22,50) : rand(18,36),
+        max:0,
+        len: burst ? rand(10,34) : rand(8,22),
+        w: rand(1.0,2.0),
+        a: burst ? rand(.35,.8) : rand(.18,.45)
+      });
+    }
+  }
+  function stepSparks(){
+    for(let i=sparks.length-1;i>=0;i--){
+      const s=sparks[i];
+      s.max=Math.max(s.max,s.life);
+      s.x+=s.vx; s.y+=s.vy;
+      s.vx*=0.985; s.vy=s.vy*0.985 + 0.01;
+      s.life-=1;
+      if(s.life<=0) sparks.splice(i,1);
+    }
+  }
+  function drawSparks(){
+    ctx.save();
+    ctx.globalCompositeOperation="lighter";
+    for(const s of sparks){
+      const t=s.life/(s.max||1);
+      const a=s.a*t;
+      const x2=s.x - s.vx*(s.len*0.9);
+      const y2=s.y - s.vy*(s.len*0.9);
+      ctx.lineWidth=s.w;
+      ctx.strokeStyle=`rgba(255,60,80,${a})`;
+      ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.fillStyle=`rgba(255,120,140,${a*0.9})`;
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.w*1.2,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Heart animation
+  let drawProgress = 0; // 0..1 (draw "حبة حبة")
+  function drawHeart(now){
+    const cx=W/2, cy=H/2+20;
+
+    // after finished drawing, pulse
+    const done = drawProgress >= 1;
+    const pulse = done ? (1 + 0.04*Math.sin(now*0.0022)) : 1;
+    const scale = Math.min(W,H) * 0.018 * pulse;
+
+    // glow amount
+    const glow = 0.55 + 0.45*Math.sin(now*0.003);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, -scale);
+
+    ctx.globalCompositeOperation="lighter";
+
+    // draw only part of outline based on progress
+    const steps = 520;
+    const maxStep = Math.floor(steps * drawProgress);
+
+    // outer glow strokes
+    for(let g=0; g<4; g++){
+      ctx.lineWidth = 1.2 + g*0.55;
+      ctx.strokeStyle = `rgba(255,40,70,${0.07*glow})`;
+      ctx.beginPath();
+      for(let i=0;i<=maxStep;i++){
+        const t = (i/steps)*Math.PI*2;
+        const p = heartPoint(t);
+        if(i===0) ctx.moveTo(p.x,p.y);
+        else ctx.lineTo(p.x,p.y);
+      }
+      ctx.stroke();
+    }
+
+    // main clean outline
+    ctx.lineWidth = 1.15;
+    ctx.strokeStyle = `rgba(255,90,110,${0.85*glow})`;
+    ctx.beginPath();
+    for(let i=0;i<=maxStep;i++){
+      const t = (i/steps)*Math.PI*2;
+      const p = heartPoint(t);
+      if(i===0) ctx.moveTo(p.x,p.y);
+      else ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+
+    // build up progress
+    if(!done) drawProgress = Math.min(1, drawProgress + 0.012);
+  }
+
+  function fade(){
+    ctx.fillStyle="rgba(0,0,0,0.14)";
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function loop(now){
+    if(now < 60){
+      ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+    } else {
+      fade();
+    }
+
+    // gentle ambient sparks around heart
+    if(Math.random() < 0.7){
+      spawnSpark(W/2+rand(-110,110), H/2+rand(-60,140), false);
+    }
+
+    stepSparks();
+    drawSparks();
+    drawHeart(now);
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  addEventListener("pointerdown", (e)=>{
+    spawnSpark(e.clientX, e.clientY, true);
+  });
+})();
+</script>
 </body>
 </html>
