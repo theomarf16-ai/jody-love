@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Jody</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{display:block;width:100vw;height:100vh}
+    .overlay{
+      position:fixed;inset:0;pointer-events:none;
+      display:grid;place-items:center;text-align:center;
+      font-family:Georgia,"Times New Roman",serif;color:rgba(255,255,255,.92)
+    }
+    .title{
+      position:fixed;top:12vh;left:0;right:0;
+      font-size:clamp(28px,4vw,52px);font-style:italic;letter-spacing:.5px;
+      text-shadow:0 0 18px rgba(255,255,255,.12)
+    }
+    .name{
+      position:fixed;top:50%;left:50%;transform:translate(-50%,-30%);
+      font-size:clamp(44px,7vw,110px);font-weight:800;letter-spacing:2px;
+      text-shadow:0 0 14px rgba(255,60,80,.35),0 0 34px rgba(255,60,80,.18)
+    }
+    .hint{
+      position:fixed;bottom:18px;left:0;right:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;
+      font-size:12px;color:rgba(255,255,255,.35);letter-spacing:.4px
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="overlay">
+    <div class="title">When you fall in love with a programmer.</div>
+    <div class="name">Jody</div>
+    <div class="hint">tap anywhere</div>
+  </div>
+
+<script>
+(() => {
+  // ===== EDIT NAME HERE =====
+  const NAME = "Jody";
+  document.querySelector(".name").textContent = NAME;
+
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let W=0,H=0,DPR=Math.max(1,Math.min(2,devicePixelRatio||1));
+  function resize(){
+    W = innerWidth|0; H = innerHeight|0;
+    canvas.width = (W*DPR)|0; canvas.height=(H*DPR)|0;
+    canvas.style.width=W+"px"; canvas.style.height=H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  const rand = (a,b)=>a+Math.random()*(b-a);
+
+  // ===== Heart field (implicit) =====
+  // (x^2+y^2-1)^3 - x^2 y^3 <= 0  => inside heart
+  function insideHeart(x,y){
+    const a = x*x + y*y - 1;
+    return (a*a*a - x*x*y*y*y) <= 0;
+  }
+
+  function randomPointInHeart(){
+    // sample in [-1.3,1.3] box
+    for(let i=0;i<50;i++){
+      const x = rand(-1.3,1.3);
+      const y = rand(-1.4,1.2);
+      if (insideHeart(x,y)) return {x,y};
+    }
+    return {x:0,y:0};
+  }
+
+  // ===== Scribble strokes that appear "one by one" =====
+  const strokes = []; // {x1,y1,x2,y2, w, a, hue}
+  let build = 0;      // 0..1 progress
+
+  function addScribbleStroke(){
+    const p = randomPointInHeart();
+    // short stroke direction with slight bias
+    const ang = rand(0,Math.PI*2);
+    const len = rand(0.10, 0.35);
+    const x2 = p.x + Math.cos(ang)*len;
+    const y2 = p.y + Math.sin(ang)*len;
+
+    strokes.push({
+      x1:p.x, y1:p.y, x2, y2,
+      w: rand(1.0, 2.6),
+      a: rand(0.25, 0.9),
+      hue: rand(350, 12) // red/pink
+    });
+    // cap so it stays smooth
+    if (strokes.length > 900) strokes.splice(0, strokes.length-900);
+  }
+
+  // ===== Sparks (burst) =====
+  const sparks = [];
+  function spawnSpark(x,y,burst=false){
+    const n = burst ? 120 : 2;
+    for(let i=0;i<n;i++){
+      const ang = burst ? rand(0,Math.PI*2) : rand(-Math.PI,Math.PI);
+      const spd = burst ? rand(2.2,8.8) : rand(0.9,2.6);
+      const len = burst ? rand(12,46) : rand(10,24);
+      sparks.push({
+        x,y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+        life: burst ? rand(26,60) : rand(18,36),
+        max:0, len, w:rand(1.1,2.3),
+        hue: rand(350, 12),
+        alpha: burst ? rand(.45,.95) : rand(.22,.55)
+      });
+    }
+  }
+
+  function stepSparks(){
+    for(let i=sparks.length-1;i>=0;i--){
+      const s=sparks[i];
+      s.max = Math.max(s.max, s.life);
+      s.x += s.vx; s.y += s.vy;
+      s.vx *= 0.985; s.vy = s.vy*0.985 + 0.01;
+      s.life -= 1;
+      if(s.life<=0) sparks.splice(i,1);
+    }
+  }
+
+  function drawSparks(){
+    ctx.save();
+    ctx.globalCompositeOperation="lighter";
+    for(const s of sparks){
+      const t = s.life/(s.max||1);
+      const a = s.alpha*t;
+      const x2 = s.x - s.vx*(s.len*0.9);
+      const y2 = s.y - s.vy*(s.len*0.9);
+      ctx.lineWidth = s.w;
+      ctx.strokeStyle = `hsla(${(s.hue+360)%360},95%,55%,${a})`;
+      ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.fillStyle = `hsla(${(s.hue+360)%360},95%,60%,${a*0.9})`;
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.w*1.1,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ===== Render =====
+  function fade(){
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function drawScribbleHeart(time){
+    const cx=W/2, cy=H/2+20;
+
+    // grow/pulse
+    build = Math.min(1, build + 0.006);
+    const pulse = 1 + 0.04*Math.sin(time*0.0022);
+    const scale = Math.min(W,H) * 0.22 * pulse; // pixels per heart unit
+
+    // add strokes gradually: "حبه حبه"
+    const perFrame = Math.floor(2 + build*6);
+    for(let i=0;i<perFrame;i++) addScribbleStroke();
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    // flip y so heart looks upright
+    ctx.scale(1, -1);
+
+    ctx.globalCompositeOperation="lighter";
+
+    // draw only a portion early to emphasize build-up
+    const count = Math.floor(strokes.length * build);
+
+    for(let i=0;i<count;i++){
+      const s = strokes[i];
+
+      const x1 = s.x1*scale, y1 = s.y1*scale;
+      const x2 = s.x2*scale, y2 = s.y2*scale;
+
+      // glow layers
+      const glow = 0.55 + 0.45*Math.sin(time*0.003);
+      ctx.lineCap="round";
+      ctx.lineJoin="round";
+
+      ctx.lineWidth = s.w*3.2;
+      ctx.strokeStyle = `hsla(${(s.hue+360)%360},95%,45%,${0.06*glow})`;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+
+      ctx.lineWidth = s.w*1.7;
+      ctx.strokeStyle = `hsla(${(s.hue+360)%360},95%,55%,${0.14*glow})`;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+
+      ctx.lineWidth = s.w;
+      ctx.strokeStyle = `hsla(${(s.hue+360)%360},95%,60%,${s.a*0.9})`;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function loop(now){
+    if(now < 60){
+      ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+    } else {
+      fade();
+    }
+
+    // ambient sparks around heart
+    if(Math.random()<0.9){
+      spawnSpark(W/2+rand(-120,120), H/2+rand(-60,160), false);
+    }
+
+    stepSparks();
+    drawSparks();
+    drawScribbleHeart(now);
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  addEventListener("pointerdown", (e)=>{
+    spawnSpark(e.clientX, e.clientY, true);
+    // restart build if you tap top area (nice replay)
+    if(e.clientY < H*0.25){ strokes.length=0; build=0; }
+  });
+})();
+</script>
+</body>
+</html>
